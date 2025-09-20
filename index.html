@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KSL_Study (Sentence First → Reveal = Video)</title>
+  <style>
+    :root{
+      --bg:#0b1020; --fg:#f6f7fb; --muted:#9aa3b2; --card:#121935; --accent:#6aa9ff;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,Pretendard,Malgun Gothic,sans-serif;}
+    header{padding:16px 16px 8px;display:flex;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid #1e274a;}
+    header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.2px}
+    .wrap{max-width:960px;margin:0 auto;padding:16px;}
+    .card{background:var(--card);border:1px solid #1e274a;border-radius:16px;padding:18px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+    .sentence{font-size:20px;line-height:1.6;margin:0 0 8px;}
+    .keyword{font-size:14px;color:var(--muted);margin:0 0 16px}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 8px}
+    button{appearance:none;border:1px solid #2a3563;background:#182352;color:var(--fg);padding:10px 14px;border-radius:12px;font-weight:600;cursor:pointer}
+    button.primary{background:var(--accent);border-color:transparent;color:#071025}
+    button.ghost{background:transparent}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .idx{font-size:12px;color:var(--muted)}
+    .video-wrap{margin-top:14px;display:none}
+    video{width:100%;max-height:60vh;border-radius:12px;background:#000}
+    .grid{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+    .hint{font-size:12px;color:var(--muted);margin-top:6px}
+    @media (max-width:640px){
+      .sentence{font-size:18px}
+      header h1{font-size:16px}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>KSL_Study · Sentence First</h1>
+    <div class="toolbar">
+      <button id="btnShuffle" class="ghost" title="Shuffle current list">Shuffle</button>
+      <button id="btnReset" class="ghost" title="Reset to original order">Reset</button>
+    </div>
+  </header>
+  <div class="wrap">
+
+    <div class="card">
+      <div class="grid">
+        <div>
+          <p class="sentence" id="sentence">Sentence will appear here.</p>
+          <p class="keyword" id="keyword">Vocabulary: <span id="kwText">—</span></p>
+        </div>
+        <div style="text-align:right">
+          <div class="idx" id="idx">1 / 1</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="btnPrev" title="Previous (←)">Prev</button>
+        <button id="btnReveal" class="primary" title="Show Answer / Video (Space)">Show Answer (Video)</button>
+        <button id="btnHide" class="ghost" title="Hide Video">Hide</button>
+        <button id="btnNext" title="Next (→)">Next</button>
+      </div>
+      <div class="video-wrap" id="videoWrap">
+        <video id="vid" playsinline controls preload="metadata"></video>
+        <div class="hint">※ Autoplay may be restricted on mobile. Please press the play button.</div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+/* ============================================================
+   1) DATA: Add/edit items here.
+      Format: { k: "Vocabulary", ex: "Example sentence", src: "Video mp4 URL" }
+   ============================================================ */
+const DATA_ORIGINAL = [
+  { k: "붕대, 붕대를 감다", ex: "아들의 팔에 상처가 나서 나는 서둘러 붕대를 찾았다.", src: "https://ksldict.korean.go.kr/kslserv/signFile/video/exmp/202507/GcSOs2ID9kuGNLeE.MP4" },
+
+  // Add more items here...
+];
+
+/* ============================================================
+   2) State & Utility
+   ============================================================ */
+let order = [...DATA_ORIGINAL.keys()];
+let cur = 0;
+
+const $sentence = document.getElementById('sentence');
+const $keyword  = document.getElementById('keyword');
+const $kwText   = document.getElementById('kwText');
+const $idx      = document.getElementById('idx');
+const $video    = document.getElementById('vid');
+const $videoWrap= document.getElementById('videoWrap');
+const $btnPrev  = document.getElementById('btnPrev');
+const $btnNext  = document.getElementById('btnNext');
+const $btnReveal= document.getElementById('btnReveal');
+const $btnHide  = document.getElementById('btnHide');
+const $btnShuffle=document.getElementById('btnShuffle');
+const $btnReset = document.getElementById('btnReset');
+
+function clampIndex(i){
+  const n = order.length;
+  if(n===0) return 0;
+  return (i + n) % n;
+}
+
+function stopVideo(){
+  try{ $video.pause(); }catch(e){}
+  $video.removeAttribute('src');
+  $video.load();
+}
+
+function hideAnswer(){
+  stopVideo();
+  $videoWrap.style.display = 'none';
+  $btnReveal.disabled = false;
+}
+
+function showAnswer(){
+  const item = DATA_ORIGINAL[ order[cur] ];
+  if(!item || !item.src) return;
+  $video.src = item.src;
+  $videoWrap.style.display = 'block';
+  $video.muted = true;
+  const playPromise = $video.play();
+  if(playPromise && typeof playPromise.then === 'function'){
+    playPromise.catch(()=>{});
+  }
+  $btnReveal.disabled = true;
+}
+
+function render(){
+  if(order.length === 0){
+    $sentence.textContent = 'No data. Please add items in DATA_ORIGINAL.';
+    $kwText.textContent = '—';
+    $idx.textContent = '0 / 0';
+    hideAnswer();
+    return;
+  }
+  const i = order[cur];
+  const item = DATA_ORIGINAL[i];
+  $sentence.textContent = item.ex || '(No example)';
+  $kwText.textContent = item.k || '(No vocab)';
+  $idx.textContent = `${cur+1} / ${order.length}`;
+  hideAnswer();
+}
+
+function go(delta){
+  cur = clampIndex(cur + delta);
+  render();
+}
+
+function shuffle(){
+  order = [...DATA_ORIGINAL.keys()];
+  for(let i = order.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  cur = 0;
+  render();
+  try{localStorage.setItem('ksl_order', JSON.stringify(order));}catch(e){}
+}
+
+function resetOrder(){
+  order = [...DATA_ORIGINAL.keys()];
+  cur = 0;
+  render();
+  try{localStorage.removeItem('ksl_order');}catch(e){}
+}
+
+$btnPrev.addEventListener('click', ()=>go(-1));
+$btnNext.addEventListener('click', ()=>go(1));
+$btnReveal.addEventListener('click', showAnswer);
+$btnHide.addEventListener('click', hideAnswer);
+$btnShuffle.addEventListener('click', shuffle);
+$btnReset.addEventListener('click', resetOrder);
+
+window.addEventListener('keydown', (e)=>{
+  if(e.target && ['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(e.key === 'ArrowLeft'){ e.preventDefault(); go(-1); }
+  else if(e.key === 'ArrowRight'){ e.preventDefault(); go(1); }
+  else if(e.code === 'Space'){ e.preventDefault();
+    if($videoWrap.style.display === 'none') showAnswer(); else hideAnswer();
+  }
+});
+
+try{
+  const saved = JSON.parse(localStorage.getItem('ksl_order')||'null');
+  if(Array.isArray(saved) && saved.length === DATA_ORIGINAL.length){
+    order = saved.slice();
+  }
+}catch(e){}
+
+render();
+</script>
+</body>
+</html>
